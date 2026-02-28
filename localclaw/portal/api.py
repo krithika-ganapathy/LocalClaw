@@ -35,7 +35,7 @@ def create_portal_app(service: PortalService, auth: PortalAuth) -> FastAPI:
     @app.middleware("http")
     async def api_auth_middleware(request: Request, call_next):
         path = request.url.path
-        if path.startswith("/api/") and path != "/api/auth/pair":
+        if auth.enabled and path.startswith("/api/") and path != "/api/auth/pair":
             token = request.cookies.get(auth.cookie_name)
             if not auth.verify_session_token(token):
                 return JSONResponse(status_code=401, content={"error": "unauthorized"})
@@ -47,6 +47,8 @@ def create_portal_app(service: PortalService, auth: PortalAuth) -> FastAPI:
 
     @app.post("/api/auth/pair")
     async def pair(payload: PairRequest) -> JSONResponse:
+        if not auth.enabled:
+            return JSONResponse({"ok": True, "auth_required": False})
         if not auth.verify_pin(payload.pin):
             raise HTTPException(status_code=401, detail="invalid_pin")
 
@@ -65,7 +67,10 @@ def create_portal_app(service: PortalService, auth: PortalAuth) -> FastAPI:
 
     @app.get("/api/meta")
     async def api_meta() -> dict[str, Any]:
-        return service.meta()
+        return {
+            **service.meta(),
+            "auth_required": auth.enabled,
+        }
 
     @app.get("/api/peers")
     async def api_peers() -> dict[str, Any]:

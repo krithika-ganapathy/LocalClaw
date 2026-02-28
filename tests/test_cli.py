@@ -35,8 +35,11 @@ def test_peer_table_hides_self(capsys) -> None:
 
 def test_portal_parser_flags() -> None:
     parser = build_parser()
-    args = parser.parse_args(["portal", "--bind", "0.0.0.0", "--port", "7420", "--ping-interval", "12"])
+    args = parser.parse_args(
+        ["portal", "--bind", "0.0.0.0", "--port", "7420", "--ping-interval", "12", "--require-pin"]
+    )
     assert args.command == "portal"
     assert args.bind == "0.0.0.0"
     assert args.port == 7420
     assert args.ping_interval == 12
+    assert args.require_pin is True

@@ -150,12 +150,19 @@ uv run localclaw portal
 
 The portal prints:
 
-- A 6-digit pairing PIN
+- Auth mode (`disabled` by default, or a 6-digit pairing PIN when enabled)
 - LAN URL (for example `http://192.168.1.42:7420`)
 - Hostname URL (for example `http://my-laptop.local:7420`)
 - Terminal QR code for quick phone scan
 
-Open the URL from any device on the same LAN, enter the PIN once, then view discovered agents and run manual pings.
+Open the URL from any device on the same LAN and view discovered agents with manual ping controls.
+If `--require-pin` is enabled, enter the PIN once first.
+
+Enable portal PIN pairing only if needed:
+
+```bash
+uv run localclaw portal --require-pin
+```
 
 ## Troubleshooting
 

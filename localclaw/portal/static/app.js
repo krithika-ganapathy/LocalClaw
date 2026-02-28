@@ -13,6 +13,11 @@ const peersEl = document.getElementById("peers");
 const metaLine = document.getElementById("meta-line");
 const peerTemplate = document.getElementById("peer-template");
 
+bootstrap().catch(() => {
+  pairingEl.classList.remove("hidden");
+  pairStatus.textContent = "Failed to connect to portal API.";
+});
+
 pairForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const pin = pinInput.value.trim();
@@ -42,6 +47,26 @@ pairForm.addEventListener("submit", async (event) => {
   await refreshPeers();
   startEventStream();
 });
+
+async function bootstrap() {
+  const response = await fetch("/api/meta");
+  if (!response.ok) {
+    pairingEl.classList.remove("hidden");
+    return;
+  }
+  const meta = await response.json();
+  if (meta.auth_required) {
+    pairingEl.classList.remove("hidden");
+    return;
+  }
+
+  state.paired = true;
+  pairingEl.classList.add("hidden");
+  dashboardEl.classList.remove("hidden");
+  await refreshMeta();
+  await refreshPeers();
+  startEventStream();
+}
 
 async function refreshMeta() {
   const response = await fetch("/api/meta");

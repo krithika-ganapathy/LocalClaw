@@ -13,10 +13,12 @@ class PortalAuth:
         self,
         *,
         pin: str | None = None,
+        enabled: bool = False,
         session_ttl_s: int = 86400,
         cookie_name: str = "localclaw_session",
         secret: bytes | None = None,
     ) -> None:
+        self.enabled = enabled
         self.pin = pin or f"{secrets.randbelow(1_000_000):06d}"
         self.session_ttl_s = session_ttl_s
         self.cookie_name = cookie_name

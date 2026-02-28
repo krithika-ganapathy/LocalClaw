@@ -244,9 +244,15 @@ Start the watcher on one machine:
 localclaw portal
 ```
 
-It prints a LAN URL and a 6-digit PIN. Open the URL from your phone (same network),
-enter the PIN once, and the portal will show discovered agents plus ping status.
+It prints a LAN URL and runs with no portal PIN by default. Open the URL from your phone
+(same network), and the portal will show discovered agents plus ping status.
 It also prints a terminal QR code for the LAN URL so you can scan directly.
+
+If you want portal-level access control, enable PIN mode:
+
+```bash
+localclaw portal --require-pin
+```
 
 ---
 

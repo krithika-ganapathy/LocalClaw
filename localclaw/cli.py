@@ -397,14 +397,17 @@ async def _cmd_portal(args: argparse.Namespace) -> int:
         ping_interval_s=ping_interval_s,
         with_discovery=True,
     )
-    auth = PortalAuth(session_ttl_s=cfg.portal_session_ttl_s)
+    auth = PortalAuth(enabled=bool(args.require_pin), session_ttl_s=cfg.portal_session_ttl_s)
     app = create_portal_app(service, auth)
 
     lan_host = resolved_advertise_host(cfg) if bind_host == "0.0.0.0" else bind_host
     hostname_local = f"{socket.gethostname().rstrip('.').removesuffix('.local')}.local"
     lan_url = f"http://{lan_host}:{port}"
     _print_line(f"LocalClaw portal starting on {bind_host}:{port}")
-    _print_line(f"Pairing PIN: {auth.pin}")
+    if auth.enabled:
+        _print_line(f"Pairing PIN: {auth.pin}")
+    else:
+        _print_line("Portal auth: disabled (use --require-pin to enable pairing PIN).")
     _print_line(f"URL (LAN): {lan_url}")
     _print_line(f"URL (hostname): http://{hostname_local}:{port}")
     _print_line("Press Ctrl+C to stop.")
@@ -496,6 +499,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Periodic ping interval in seconds (default from config)",
+    )
+    cmd_portal.add_argument(
+        "--require-pin",
+        action="store_true",
+        help="Require portal PIN pairing before API/UI access",
     )
 
     return parser

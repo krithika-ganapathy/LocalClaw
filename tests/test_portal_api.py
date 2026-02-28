@@ -26,27 +26,27 @@ class FakeNode:
         return {"type": "heartbeat", "from": peer_id}
 
 
-def _build_client() -> tuple[TestClient, PortalAuth]:
+def _build_client(*, auth_enabled: bool = True) -> tuple[TestClient, PortalAuth]:
     cfg = AgentConfig(agent_name="portal", agent_id="lc_portal")
     node = FakeNode()
     node.peer_store.upsert(
         PeerRecord(peer_id="lc_peer", name="peer", host="127.0.0.1", port=4117, caps=["echo"])
     )
     service = PortalService(cfg, node=node, with_discovery=False)
-    auth = PortalAuth(pin="123456", session_ttl_s=3600, secret=b"x" * 32)
+    auth = PortalAuth(pin="123456", enabled=auth_enabled, session_ttl_s=3600, secret=b"x" * 32)
     app = create_portal_app(service, auth)
     return TestClient(app), auth
 
 
 def test_api_requires_auth_cookie() -> None:
-    client, _auth = _build_client()
+    client, _auth = _build_client(auth_enabled=True)
     with client:
         response = client.get("/api/peers")
         assert response.status_code == 401
 
 
 def test_pairing_allows_authenticated_requests() -> None:
-    client, _auth = _build_client()
+    client, _auth = _build_client(auth_enabled=True)
     with client:
         bad = client.post("/api/auth/pair", json={"pin": "000000"})
         assert bad.status_code == 401
@@ -67,7 +67,7 @@ def test_pairing_allows_authenticated_requests() -> None:
 
 
 def test_manual_ping_endpoint() -> None:
-    client, _auth = _build_client()
+    client, _auth = _build_client(auth_enabled=True)
     with client:
         client.post("/api/auth/pair", json={"pin": "123456"})
         resp = client.post("/api/peers/lc_peer/ping")
@@ -76,10 +76,21 @@ def test_manual_ping_endpoint() -> None:
 
 
 def test_events_endpoint_requires_auth_and_is_registered() -> None:
-    client, _auth = _build_client()
+    client, _auth = _build_client(auth_enabled=True)
     with client:
         unauthorized = client.get("/api/events")
         assert unauthorized.status_code == 401
 
         routes = {route.path for route in client.app.routes}
         assert "/api/events" in routes
+
+
+def test_api_allows_access_when_auth_disabled() -> None:
+    client, _auth = _build_client(auth_enabled=False)
+    with client:
+        meta = client.get("/api/meta")
+        assert meta.status_code == 200
+        assert meta.json()["auth_required"] is False
+
+        peers = client.get("/api/peers")
+        assert peers.status_code == 200
