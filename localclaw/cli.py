@@ -10,9 +10,20 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .config import AgentConfig, ensure_config, load_config
+from .config import AgentConfig, _save_yaml, config_path, ensure_config, load_config
 from .node import AgentNode
+from .peer_store import PeerRecord
 from .router import Router
+
+
+def _inject_direct_peer(node: AgentNode, peer_id: str, direct: str) -> None:
+    """Inject a peer into the store directly from HOST:PORT, skipping mDNS."""
+    host, _, port_str = direct.rpartition(":")
+    if not host or not port_str.isdigit():
+        raise ValueError(f"--direct must be HOST:PORT, got: {direct!r}")
+    node.peer_store.upsert(
+        PeerRecord(peer_id=peer_id, name=peer_id, host=host, port=int(port_str), source="direct")
+    )
 
 
 def _format_json(payload: Any) -> str:
@@ -78,6 +89,76 @@ def _run_doctor(config: AgentConfig) -> int:
     return 0 if all(ok for _, ok, _ in checks) else 2
 
 
+def _cmd_setup(args: argparse.Namespace) -> int:
+    cfg_path = config_path(args.config)
+    ensure_config(args.config)
+    cfg = load_config(args.config)
+
+    print("=== LocalClaw Agent Setup ===")
+    print(f"Config: {cfg_path}\n")
+
+    name = input(f"Agent name [{cfg.agent_name}]: ").strip() or cfg.agent_name
+
+    MISTRAL_SKILLS: list[tuple[str, str]] = [
+        ("summarize", "Summarize text"),
+        ("code",      "Generate code from a description"),
+        ("ask",       "General Q&A / chat"),
+        ("translate", "Translate text to another language"),
+        ("explain",   "Explain code or a concept"),
+    ]
+
+    print("\nAlways enabled: echo, capabilities")
+    print("\nMistral-powered skills (require MISTRAL_API_KEY):")
+    for i, (skill_name, desc) in enumerate(MISTRAL_SKILLS, 1):
+        tag = " [on]" if skill_name in cfg.caps else ""
+        print(f"  [{i}] {skill_name:<12} - {desc}{tag}")
+
+    print("\nEnter numbers to enable (e.g. 1,3), 'all', or press Enter to skip:")
+    raw = input("Skills: ").strip().lower()
+
+    if raw in ("all", "a"):
+        chosen = {n for n, _ in MISTRAL_SKILLS}
+    elif raw:
+        chosen: set[str] = set()
+        for part in raw.replace(" ", "").split(","):
+            if part.isdigit() and 1 <= int(part) <= len(MISTRAL_SKILLS):
+                chosen.add(MISTRAL_SKILLS[int(part) - 1][0])
+    else:
+        chosen = set()
+
+    model = cfg.model if cfg.model not in ("none", "", None) else "none"
+    if chosen:
+        default_model = model if model != "none" else "mistral-small-latest"
+        model = input(f"Mistral model [{default_model}]: ").strip() or default_model
+        print("\nNote: set MISTRAL_API_KEY in your environment before running 'localclaw run'.")
+
+    caps = ["echo", "capabilities"] + sorted(chosen)
+
+    data: dict[str, Any] = {
+        "agent_name": name,
+        "agent_port": cfg.agent_port,
+        "caps": caps,
+        "model": model,
+        "status": cfg.status,
+        "version": cfg.version,
+        "trust": cfg.trust,
+        "bind_host": cfg.bind_host,
+    }
+    if cfg.agent_id:
+        data["agent_id"] = cfg.agent_id
+    if cfg.advertise_host:
+        data["advertise_host"] = cfg.advertise_host
+
+    _save_yaml(cfg_path, data)
+
+    final = load_config(args.config)
+    print(f"\nConfig saved to {cfg_path}")
+    print(f"Agent ID : {final.agent_id}")
+    print(f"Skills   : {', '.join(final.caps)}")
+    print(f"Model    : {final.model}")
+    return 0
+
+
 async def _cmd_print_config(args: argparse.Namespace) -> int:
     if args.ensure:
         ensure_config(args.config)
@@ -89,24 +170,28 @@ async def _cmd_print_config(args: argparse.Namespace) -> int:
 async def _cmd_run(args: argparse.Namespace) -> int:
     ensure_config(args.config)
     cfg = load_config(args.config)
-    node = AgentNode(cfg)
-    await node.start(with_discovery=not args.no_discovery, with_transport=True)
+
+    from .agent import build_agent
+
+    agent = build_agent(cfg)
+    await agent.start(with_discovery=not args.no_discovery, with_transport=True)
 
     print(
         f"LocalClaw running: agent_id={cfg.agent_id} name={cfg.agent_name} "
         f"listen={cfg.bind_host}:{cfg.agent_port}"
     )
+    print(f"Skills: {', '.join(cfg.caps)}")
     print("Press Ctrl+C to stop.")
 
     try:
         while True:
             await asyncio.sleep(2.0)
             if args.show_peers:
-                _print_peer_table(node)
+                _print_peer_table(agent.node)
     except KeyboardInterrupt:
         pass
     finally:
-        await node.stop()
+        await agent.stop()
     return 0
 
 
@@ -130,9 +215,12 @@ async def _cmd_ping(args: argparse.Namespace) -> int:
     ensure_config(args.config)
     cfg = load_config(args.config)
     node = AgentNode(cfg)
-    await node.start(with_discovery=True, with_transport=True)
+    direct = getattr(args, "direct", None)
+    await node.start(with_discovery=not direct, with_transport=True)
     try:
-        if args.wait > 0:
+        if direct:
+            _inject_direct_peer(node, args.peer_id, direct)
+        elif args.wait > 0:
             await node.wait_for_peer(args.peer_id, timeout=args.wait)
         response = await node.ping(args.peer_id, timeout=args.timeout)
         print(_format_json(response))
@@ -145,9 +233,12 @@ async def _cmd_send_task(args: argparse.Namespace) -> int:
     ensure_config(args.config)
     cfg = load_config(args.config)
     node = AgentNode(cfg)
-    await node.start(with_discovery=True, with_transport=True)
+    direct = getattr(args, "direct", None)
+    await node.start(with_discovery=not direct, with_transport=True)
     try:
-        if args.wait > 0:
+        if direct:
+            _inject_direct_peer(node, args.peer_id, direct)
+        elif args.wait > 0:
             await node.wait_for_peer(args.peer_id, timeout=args.wait)
 
         payload = Router.parse_json_input(args.input)
@@ -217,8 +308,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.dedent(
             """\
-            LocalClaw Person A network substrate CLI.
-            Commands support discovery, transport health checks, ping, tasks, and file transfer.
+            LocalClaw — LAN-native multi-agent protocol.
+            Commands: setup, run, scan, ping, send-task, send-file, capability-query, doctor.
             """
         ),
     )
@@ -226,6 +317,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=None, help=config_help)
 
     sub = parser.add_subparsers(dest="command", required=True)
+
+    cmd_setup = sub.add_parser("setup", help="Interactive agent setup wizard")
+    cmd_setup.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
 
     cmd_print = sub.add_parser("print-config", help="Print parsed config and derived agent_id")
     cmd_print.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
@@ -248,6 +342,7 @@ def build_parser() -> argparse.ArgumentParser:
     cmd_ping.add_argument("peer_id")
     cmd_ping.add_argument("--timeout", type=float, default=5.0)
     cmd_ping.add_argument("--wait", type=float, default=5.0, help="Wait for peer discovery before ping")
+    cmd_ping.add_argument("--direct", default=None, metavar="HOST:PORT", help="Skip mDNS, connect directly")
 
     cmd_task = sub.add_parser("send-task", help="Send task to a peer")
     cmd_task.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
@@ -257,6 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
     cmd_task.add_argument("--stream", action="store_true", help="Print stream messages before final result")
     cmd_task.add_argument("--timeout", type=float, default=30.0)
     cmd_task.add_argument("--wait", type=float, default=5.0)
+    cmd_task.add_argument("--direct", default=None, metavar="HOST:PORT", help="Skip mDNS, connect directly")
 
     cmd_file = sub.add_parser("send-file", help="Send file payload to a peer")
     cmd_file.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
@@ -275,6 +371,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def _dispatch(args: argparse.Namespace) -> int:
+    if args.command == "setup":
+        return _cmd_setup(args)
     if args.command == "print-config":
         return await _cmd_print_config(args)
     if args.command == "run":

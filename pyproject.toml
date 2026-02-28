@@ -9,6 +9,7 @@ description = "LAN-native agent protocol network substrate"
 requires-python = ">=3.11"
 dependencies = [
   "zeroconf>=0.133.0",
+  "mistralai>=1.0.0",
 ]
 
 [project.optional-dependencies]
