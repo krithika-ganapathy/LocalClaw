@@ -1,7 +1,7 @@
 agent_name: agent-a
 agent_id: lc_a
 agent_port: 4117
-caps: echo,capabilities
+caps: echo,capabilities, summarize
 model: none
 status: idle
 version: 0.1.0
