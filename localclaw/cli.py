@@ -15,6 +15,57 @@ from .node import AgentNode
 from .peer_store import PeerRecord
 from .router import Router
 
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.syntax import Syntax
+    from rich.table import Table
+
+    _RICH = True
+    _CONSOLE: Console | None = Console()
+except Exception:  # pragma: no cover - optional dependency fallback
+    _RICH = False
+    _CONSOLE = None
+
+try:
+    import qrcode
+
+    _QRCODE = True
+except Exception:  # pragma: no cover - optional dependency fallback
+    _QRCODE = False
+
+
+def _print_line(message: str) -> None:
+    if _RICH and _CONSOLE is not None:
+        _CONSOLE.print(message)
+        return
+    print(message)
+
+
+def _print_json(payload: Any) -> None:
+    rendered = _format_json(payload)
+    if _RICH and _CONSOLE is not None:
+        _CONSOLE.print(Syntax(rendered, "json", word_wrap=False))
+        return
+    print(rendered)
+
+
+def _print_qr(url: str) -> None:
+    if not _QRCODE:
+        return
+
+    qr = qrcode.QRCode(border=1)
+    qr.add_data(url)
+    qr.make(fit=True)
+    matrix = qr.get_matrix()
+    lines = ["".join("██" if cell else "  " for cell in row) for row in matrix]
+    ascii_qr = "\n".join(lines)
+
+    if _RICH and _CONSOLE is not None:
+        _CONSOLE.print(Panel.fit(ascii_qr, title="Scan to open portal", border_style="cyan"))
+        return
+    print(ascii_qr)
+
 
 def _inject_direct_peer(node: AgentNode, peer_id: str, direct: str) -> None:
     """Inject a peer into the store directly from HOST:PORT, skipping mDNS."""
@@ -37,10 +88,27 @@ def _print_peer_table(node: AgentNode) -> None:
         key=lambda p: p.peer_id,
     )
     if not peers:
-        print("No peers discovered.")
+        _print_line("No peers discovered.")
+        return
+    if _RICH and _CONSOLE is not None:
+        table = Table(title="Discovered Peers")
+        table.add_column("Peer ID")
+        table.add_column("Name")
+        table.add_column("Host")
+        table.add_column("Status")
+        table.add_column("Caps")
+        for peer in peers:
+            table.add_row(
+                peer.peer_id,
+                peer.name,
+                f"{peer.host}:{peer.port}",
+                peer.status,
+                ",".join(peer.caps),
+            )
+        _CONSOLE.print(table)
         return
     for peer in peers:
-        print(
+        _print_line(
             f"{peer.peer_id}  name={peer.name}  host={peer.host}:{peer.port} "
             f"status={peer.status} caps={','.join(peer.caps)}"
         )
@@ -81,10 +149,14 @@ def _run_doctor(config: AgentConfig) -> int:
 
     for name, ok, detail in checks:
         state = "OK" if ok else "FAIL"
-        print(f"[{state}] {name}: {detail}")
+        if _RICH and _CONSOLE is not None:
+            style = "green" if ok else "red"
+            _CONSOLE.print(f"[{style}][{state}][/{style}] {name}: {detail}")
+        else:
+            print(f"[{state}] {name}: {detail}")
 
     if sys.platform.startswith("win"):
-        print("Windows note: discovery can fail on Public networks or when firewall blocks multicast UDP 5353.")
+        _print_line("Windows note: discovery can fail on Public networks or when firewall blocks multicast UDP 5353.")
 
     return 0 if all(ok for _, ok, _ in checks) else 2
 
@@ -94,8 +166,11 @@ def _cmd_setup(args: argparse.Namespace) -> int:
     ensure_config(args.config)
     cfg = load_config(args.config)
 
-    print("=== LocalClaw Agent Setup ===")
-    print(f"Config: {cfg_path}\n")
+    if _RICH and _CONSOLE is not None:
+        _CONSOLE.print(Panel.fit("LocalClaw Agent Setup", border_style="blue"))
+    else:
+        print("=== LocalClaw Agent Setup ===")
+    _print_line(f"Config: {cfg_path}\n")
 
     name = input(f"Agent name [{cfg.agent_name}]: ").strip() or cfg.agent_name
 
@@ -107,13 +182,13 @@ def _cmd_setup(args: argparse.Namespace) -> int:
         ("explain",   "Explain code or a concept"),
     ]
 
-    print("\nAlways enabled: echo, capabilities")
-    print("\nMistral-powered skills (require MISTRAL_API_KEY):")
+    _print_line("\nAlways enabled: echo, capabilities")
+    _print_line("\nMistral-powered skills (require MISTRAL_API_KEY):")
     for i, (skill_name, desc) in enumerate(MISTRAL_SKILLS, 1):
         tag = " [on]" if skill_name in cfg.caps else ""
-        print(f"  [{i}] {skill_name:<12} - {desc}{tag}")
+        _print_line(f"  [{i}] {skill_name:<12} - {desc}{tag}")
 
-    print("\nEnter numbers to enable (e.g. 1,3), 'all', or press Enter to skip:")
+    _print_line("\nEnter numbers to enable (e.g. 1,3), 'all', or press Enter to skip:")
     raw = input("Skills: ").strip().lower()
 
     if raw in ("all", "a"):
@@ -130,7 +205,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
     if chosen:
         default_model = model if model != "none" else "mistral-small-latest"
         model = input(f"Mistral model [{default_model}]: ").strip() or default_model
-        print("\nNote: set MISTRAL_API_KEY in your environment before running 'localclaw run'.")
+        _print_line("\nNote: set MISTRAL_API_KEY in your environment before running 'localclaw run'.")
 
     caps = ["echo", "capabilities"] + sorted(chosen)
 
@@ -152,10 +227,10 @@ def _cmd_setup(args: argparse.Namespace) -> int:
     _save_yaml(cfg_path, data)
 
     final = load_config(args.config)
-    print(f"\nConfig saved to {cfg_path}")
-    print(f"Agent ID : {final.agent_id}")
-    print(f"Skills   : {', '.join(final.caps)}")
-    print(f"Model    : {final.model}")
+    _print_line(f"\nConfig saved to {cfg_path}")
+    _print_line(f"Agent ID : {final.agent_id}")
+    _print_line(f"Skills   : {', '.join(final.caps)}")
+    _print_line(f"Model    : {final.model}")
     return 0
 
 
@@ -163,7 +238,7 @@ async def _cmd_print_config(args: argparse.Namespace) -> int:
     if args.ensure:
         ensure_config(args.config)
     cfg = load_config(args.config)
-    print(_format_json(cfg.to_dict()))
+    _print_json(cfg.to_dict())
     return 0
 
 
@@ -176,12 +251,12 @@ async def _cmd_run(args: argparse.Namespace) -> int:
     agent = build_agent(cfg)
     await agent.start(with_discovery=not args.no_discovery, with_transport=True)
 
-    print(
+    _print_line(
         f"LocalClaw running: agent_id={cfg.agent_id} name={cfg.agent_name} "
         f"listen={cfg.bind_host}:{cfg.agent_port}"
     )
-    print(f"Skills: {', '.join(cfg.caps)}")
-    print("Press Ctrl+C to stop.")
+    _print_line(f"Skills: {', '.join(cfg.caps)}")
+    _print_line("Press Ctrl+C to stop.")
 
     try:
         while True:
@@ -223,7 +298,7 @@ async def _cmd_ping(args: argparse.Namespace) -> int:
         elif args.wait > 0:
             await node.wait_for_peer(args.peer_id, timeout=args.wait)
         response = await node.ping(args.peer_id, timeout=args.timeout)
-        print(_format_json(response))
+        _print_json(response)
         return 0
     finally:
         await node.stop()
@@ -252,12 +327,12 @@ async def _cmd_send_task(args: argparse.Namespace) -> int:
 
             async def consume_stream() -> None:
                 async for event in node.router.stream(task_id):
-                    print(_format_json(event))
+                    _print_json(event)
 
             stream_task = asyncio.create_task(consume_stream())
             result = await asyncio.wait_for(future, timeout=args.timeout)
             await stream_task
-            print(_format_json(result))
+            _print_json(result)
             return 0
 
         result = await node.send_task(
@@ -266,7 +341,7 @@ async def _cmd_send_task(args: argparse.Namespace) -> int:
             input_data=payload,
             timeout=args.timeout,
         )
-        print(_format_json(result))
+        _print_json(result)
         return 0
     finally:
         await node.stop()
@@ -281,7 +356,7 @@ async def _cmd_send_file(args: argparse.Namespace) -> int:
         if args.wait > 0:
             await node.wait_for_peer(args.peer_id, timeout=args.wait)
         result = await node.send_file(args.peer_id, Path(args.path), timeout=args.timeout)
-        print(_format_json(result))
+        _print_json(result)
         return 0
     finally:
         await node.stop()
@@ -296,7 +371,7 @@ async def _cmd_capability_query(args: argparse.Namespace) -> int:
         if args.wait > 0:
             await node.wait_for_peer(args.peer_id, timeout=args.wait)
         response = await node.capability_query(args.peer_id, timeout=args.timeout)
-        print(_format_json(response))
+        _print_json(response)
         return 0
     finally:
         await node.stop()
@@ -327,11 +402,13 @@ async def _cmd_portal(args: argparse.Namespace) -> int:
 
     lan_host = resolved_advertise_host(cfg) if bind_host == "0.0.0.0" else bind_host
     hostname_local = f"{socket.gethostname().rstrip('.').removesuffix('.local')}.local"
-    print(f"LocalClaw portal starting on {bind_host}:{port}")
-    print(f"Pairing PIN: {auth.pin}")
-    print(f"URL (LAN): http://{lan_host}:{port}")
-    print(f"URL (hostname): http://{hostname_local}:{port}")
-    print("Press Ctrl+C to stop.")
+    lan_url = f"http://{lan_host}:{port}"
+    _print_line(f"LocalClaw portal starting on {bind_host}:{port}")
+    _print_line(f"Pairing PIN: {auth.pin}")
+    _print_line(f"URL (LAN): {lan_url}")
+    _print_line(f"URL (hostname): http://{hostname_local}:{port}")
+    _print_line("Press Ctrl+C to stop.")
+    _print_qr(lan_url)
 
     server = uvicorn.Server(
         uvicorn.Config(

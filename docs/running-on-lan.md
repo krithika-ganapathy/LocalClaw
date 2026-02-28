@@ -246,6 +246,7 @@ localclaw portal
 
 It prints a LAN URL and a 6-digit PIN. Open the URL from your phone (same network),
 enter the PIN once, and the portal will show discovered agents plus ping status.
+It also prints a terminal QR code for the LAN URL so you can scan directly.
 
 ---
 

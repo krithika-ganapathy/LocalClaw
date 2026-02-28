@@ -180,11 +180,14 @@ class MDNSDiscovery:
             self._service_name = service_name
 
         if browse:
+            # In browse-only mode we are not advertising ourselves, so we should not
+            # suppress entries that happen to share this config's agent_id.
+            listener_local_id = (self._config.agent_id or "") if advertise else ""
             listener = _ServiceListener(
                 zeroconf=self._zeroconf,
                 peer_store=self._peer_store,
                 loop=loop,
-                local_agent_id=self._config.agent_id or "",
+                local_agent_id=listener_local_id,
                 on_update=self._on_update,
                 on_remove=self._on_remove,
             )
