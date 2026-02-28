@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localclaw"
+version = "0.1.0"
+description = "LAN-native agent protocol network substrate"
+requires-python = ">=3.11"
+dependencies = [
+  "zeroconf>=0.133.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+localclaw = "localclaw.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["localclaw*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
