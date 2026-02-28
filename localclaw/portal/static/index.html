@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LocalClaw Portal</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <h1>LocalClaw Portal</h1>
+        <p>LAN discovery and health for nearby agents.</p>
+      </header>
+
+      <section id="pairing" class="card">
+        <h2>Pair Device</h2>
+        <p>Enter the 6-digit PIN shown in the portal terminal.</p>
+        <form id="pair-form">
+          <input id="pair-pin" type="password" inputmode="numeric" maxlength="6" placeholder="123456" required />
+          <button type="submit">Pair</button>
+        </form>
+        <p id="pair-status" class="status"></p>
+      </section>
+
+      <section id="dashboard" class="hidden">
+        <div class="card summary">
+          <h2>Agents</h2>
+          <p id="meta-line">Loading...</p>
+        </div>
+
+        <div id="peers" class="peers"></div>
+      </section>
+    </main>
+
+    <template id="peer-template">
+      <article class="peer-card">
+        <div class="peer-head">
+          <div>
+            <h3 class="peer-name"></h3>
+            <p class="peer-id"></p>
+          </div>
+          <span class="pill"></span>
+        </div>
+        <p class="peer-host"></p>
+        <p class="peer-caps"></p>
+        <p class="peer-ping"></p>
+        <button class="ping-btn" type="button">Ping</button>
+      </article>
+    </template>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

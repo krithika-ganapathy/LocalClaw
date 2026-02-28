@@ -44,14 +44,21 @@ class AgentNode:
         self._maintenance_task: asyncio.Task[None] | None = None
         self._started = False
 
-    async def start(self, *, with_discovery: bool = True, with_transport: bool = True) -> None:
+    async def start(
+        self,
+        *,
+        with_discovery: bool = True,
+        with_transport: bool = True,
+        discovery_advertise: bool = True,
+        discovery_browse: bool = True,
+    ) -> None:
         if self._started:
             return
 
         if with_transport:
             await self.transport.start(host=self.config.bind_host, port=self.config.agent_port)
         if with_discovery:
-            await self.discovery.start()
+            await self.discovery.start(advertise=discovery_advertise, browse=discovery_browse)
 
         self._maintenance_task = asyncio.create_task(self._maintenance_loop())
         self._started = True

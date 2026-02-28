@@ -31,3 +31,12 @@ def test_peer_table_hides_self(capsys) -> None:
     out = capsys.readouterr().out
     assert "lc_b" in out
     assert "lc_a" not in out
+
+
+def test_portal_parser_flags() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["portal", "--bind", "0.0.0.0", "--port", "7420", "--ping-interval", "12"])
+    assert args.command == "portal"
+    assert args.bind == "0.0.0.0"
+    assert args.port == 7420
+    assert args.ping_interval == 12

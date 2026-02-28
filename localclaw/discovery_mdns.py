@@ -135,51 +135,60 @@ class MDNSDiscovery:
         self._browser: ServiceBrowser | None = None
         self._service_info: ServiceInfo | None = None
         self._service_name: str | None = None
+        self._advertise = True
+        self._browse = True
 
     @property
     def status(self) -> DiscoveryStatus:
         return DiscoveryStatus(running=self._zeroconf is not None, service_name=self._service_name)
 
-    async def start(self) -> None:
+    async def start(self, *, advertise: bool = True, browse: bool = True) -> None:
         if Zeroconf is None or ServiceInfo is None or ServiceBrowser is None:
             raise RuntimeError("zeroconf dependency is missing; install with `pip install zeroconf`.")
 
         if self._zeroconf is not None:
             return
+        if not advertise and not browse:
+            return
+
+        self._advertise = advertise
+        self._browse = browse
 
         loop = asyncio.get_running_loop()
         self._zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
-        address = resolved_advertise_host(self._config)
-        service_name = f"{self._config.agent_id}.{SERVICE_TYPE}"
-        self._service_info = ServiceInfo(
-            type_=SERVICE_TYPE,
-            name=service_name,
-            addresses=[socket.inet_aton(address)],
-            port=self._config.agent_port,
-            properties={
-                b"id": self._config.agent_id.encode("utf-8"),
-                b"name": self._config.agent_name.encode("utf-8"),
-                b"caps": ",".join(self._config.caps).encode("utf-8"),
-                b"model": self._config.model.encode("utf-8"),
-                b"status": self._config.status.encode("utf-8"),
-                b"version": self._config.version.encode("utf-8"),
-                b"trust": self._config.trust.encode("utf-8"),
-            },
-            server=f"{socket.gethostname()}.local.",
-        )
-        await asyncio.to_thread(self._zeroconf.register_service, self._service_info)
+        if advertise:
+            address = resolved_advertise_host(self._config)
+            service_name = f"{self._config.agent_id}.{SERVICE_TYPE}"
+            self._service_info = ServiceInfo(
+                type_=SERVICE_TYPE,
+                name=service_name,
+                addresses=[socket.inet_aton(address)],
+                port=self._config.agent_port,
+                properties={
+                    b"id": self._config.agent_id.encode("utf-8"),
+                    b"name": self._config.agent_name.encode("utf-8"),
+                    b"caps": ",".join(self._config.caps).encode("utf-8"),
+                    b"model": self._config.model.encode("utf-8"),
+                    b"status": self._config.status.encode("utf-8"),
+                    b"version": self._config.version.encode("utf-8"),
+                    b"trust": self._config.trust.encode("utf-8"),
+                },
+                server=f"{socket.gethostname()}.local.",
+            )
+            await asyncio.to_thread(self._zeroconf.register_service, self._service_info)
+            self._service_name = service_name
 
-        listener = _ServiceListener(
-            zeroconf=self._zeroconf,
-            peer_store=self._peer_store,
-            loop=loop,
-            local_agent_id=self._config.agent_id or "",
-            on_update=self._on_update,
-            on_remove=self._on_remove,
-        )
-        self._browser = ServiceBrowser(self._zeroconf, SERVICE_TYPE, listener)
-        self._service_name = service_name
+        if browse:
+            listener = _ServiceListener(
+                zeroconf=self._zeroconf,
+                peer_store=self._peer_store,
+                loop=loop,
+                local_agent_id=self._config.agent_id or "",
+                on_update=self._on_update,
+                on_remove=self._on_remove,
+            )
+            self._browser = ServiceBrowser(self._zeroconf, SERVICE_TYPE, listener)
 
     async def stop(self) -> None:
         if self._zeroconf is None:

@@ -8,4 +8,5 @@ __all__ = [
     "transport_tcp",
     "router",
     "node",
+    "portal",
 ]

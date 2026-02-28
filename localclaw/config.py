@@ -30,6 +30,10 @@ class AgentConfig:
     heartbeat_timeout_s: float = 30.0
     max_transfer_bytes: int = 100 * 1024 * 1024
     stream_queue_size: int = 100
+    portal_bind_host: str = "0.0.0.0"
+    portal_port: int = 7420
+    portal_ping_interval_s: float = 10.0
+    portal_session_ttl_s: int = 86400
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -158,6 +162,10 @@ def load_config(path: str | Path | None = None) -> AgentConfig:
         heartbeat_timeout_s=float(raw.get("heartbeat_timeout_s", 30.0)),
         max_transfer_bytes=int(raw.get("max_transfer_bytes", 100 * 1024 * 1024)),
         stream_queue_size=int(raw.get("stream_queue_size", 100)),
+        portal_bind_host=str(raw.get("portal_bind_host", "0.0.0.0")),
+        portal_port=int(raw.get("portal_port", 7420)),
+        portal_ping_interval_s=float(raw.get("portal_ping_interval_s", 10.0)),
+        portal_session_ttl_s=int(raw.get("portal_session_ttl_s", 86400)),
     )
 
     if cfg.agent_id is None:

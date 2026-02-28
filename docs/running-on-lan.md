@@ -236,6 +236,19 @@ This requires both agents to be running and able to reach each other via TCP.
 
 ---
 
+## LAN portal (Chromecast-style discovery view)
+
+Start the watcher on one machine:
+
+```bash
+localclaw portal
+```
+
+It prints a LAN URL and a 6-digit PIN. Open the URL from your phone (same network),
+enter the PIN once, and the portal will show discovered agents plus ping status.
+
+---
+
 ## macOS firewall note
 
 If macOS prompts "Do you want to allow incoming network connections?" when running
@@ -255,6 +268,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp $(which python
 |---|---|
 | `localclaw setup` | Configure agent name, skills, model |
 | `localclaw run` | Start agent (keep running) |
+| `localclaw portal` | Start LAN portal (discover + ping + phone UI) |
 | `localclaw scan` | Discover nearby agents via mDNS |
 | `localclaw doctor` | Check network prerequisites |
 | `localclaw ping <id> --direct HOST:PORT` | Test connectivity |

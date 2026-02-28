@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .config import AgentConfig, _save_yaml, config_path, ensure_config, load_config
+from .config import AgentConfig, _save_yaml, config_path, ensure_config, load_config, resolved_advertise_host
 from .node import AgentNode
 from .peer_store import PeerRecord
 from .router import Router
@@ -302,6 +302,49 @@ async def _cmd_capability_query(args: argparse.Namespace) -> int:
         await node.stop()
 
 
+async def _cmd_portal(args: argparse.Namespace) -> int:
+    ensure_config(args.config)
+    cfg = load_config(args.config)
+
+    bind_host = args.bind if args.bind is not None else cfg.portal_bind_host
+    port = int(args.port if args.port is not None else cfg.portal_port)
+    ping_interval_s = float(
+        args.ping_interval if args.ping_interval is not None else cfg.portal_ping_interval_s
+    )
+
+    from .portal import PortalAuth, PortalService
+    from .portal.api import create_portal_app
+
+    import uvicorn
+
+    service = PortalService(
+        cfg,
+        ping_interval_s=ping_interval_s,
+        with_discovery=True,
+    )
+    auth = PortalAuth(session_ttl_s=cfg.portal_session_ttl_s)
+    app = create_portal_app(service, auth)
+
+    lan_host = resolved_advertise_host(cfg) if bind_host == "0.0.0.0" else bind_host
+    hostname_local = f"{socket.gethostname().rstrip('.').removesuffix('.local')}.local"
+    print(f"LocalClaw portal starting on {bind_host}:{port}")
+    print(f"Pairing PIN: {auth.pin}")
+    print(f"URL (LAN): http://{lan_host}:{port}")
+    print(f"URL (hostname): http://{hostname_local}:{port}")
+    print("Press Ctrl+C to stop.")
+
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host=bind_host,
+            port=port,
+            log_level="info",
+        )
+    )
+    await server.serve()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="localclaw",
@@ -309,7 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=textwrap.dedent(
             """\
             LocalClaw — LAN-native multi-agent protocol.
-            Commands: setup, run, scan, ping, send-task, send-file, capability-query, doctor.
+            Commands: setup, run, portal, scan, ping, send-task, send-file, capability-query, doctor.
             """
         ),
     )
@@ -367,6 +410,17 @@ def build_parser() -> argparse.ArgumentParser:
     cmd_caps.add_argument("--timeout", type=float, default=10.0)
     cmd_caps.add_argument("--wait", type=float, default=5.0)
 
+    cmd_portal = sub.add_parser("portal", help="Run LAN portal (discovery + periodic ping + web UI)")
+    cmd_portal.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
+    cmd_portal.add_argument("--bind", default=None, help="Portal HTTP bind host (default from config)")
+    cmd_portal.add_argument("--port", type=int, default=None, help="Portal HTTP port (default from config)")
+    cmd_portal.add_argument(
+        "--ping-interval",
+        type=float,
+        default=None,
+        help="Periodic ping interval in seconds (default from config)",
+    )
+
     return parser
 
 
@@ -390,6 +444,8 @@ async def _dispatch(args: argparse.Namespace) -> int:
         return await _cmd_send_file(args)
     if args.command == "capability-query":
         return await _cmd_capability_query(args)
+    if args.command == "portal":
+        return await _cmd_portal(args)
     raise ValueError(f"Unknown command: {args.command}")
 
 

@@ -1,0 +1,191 @@
+:root {
+  --bg-top: #f8f1e8;
+  --bg-bottom: #dce8ee;
+  --card: #ffffffcc;
+  --ink: #222326;
+  --muted: #5a5f67;
+  --ok: #1f7a49;
+  --warn: #b36200;
+  --bad: #9f2121;
+  --accent: #0d5e8f;
+  --ring: #0d5e8f44;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Space Grotesk", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: linear-gradient(145deg, var(--bg-top), var(--bg-bottom));
+  min-height: 100vh;
+}
+
+.shell {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 1.2rem;
+}
+
+.hero {
+  margin-bottom: 1rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  letter-spacing: 0.02em;
+}
+
+.hero p {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid #ffffff;
+  border-radius: 16px;
+  backdrop-filter: blur(6px);
+  padding: 1rem;
+  box-shadow: 0 10px 22px #00000014;
+}
+
+.summary {
+  margin-bottom: 0.9rem;
+}
+
+#pair-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input,
+button {
+  font: inherit;
+}
+
+input {
+  flex: 1;
+  border: 1px solid #cad2dc;
+  border-radius: 10px;
+  padding: 0.7rem;
+}
+
+input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.07);
+}
+
+.status {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  min-height: 1.2rem;
+}
+
+.hidden {
+  display: none;
+}
+
+.peers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.9rem;
+}
+
+.peer-card {
+  background: #ffffffde;
+  border: 1px solid #ffffff;
+  border-radius: 14px;
+  padding: 0.8rem;
+  box-shadow: 0 8px 20px #00000010;
+  animation: pop-in 220ms ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.peer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.peer-name {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.peer-id,
+.peer-host,
+.peer-caps,
+.peer-ping {
+  margin: 0.35rem 0;
+  font-size: 0.87rem;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.pill {
+  align-self: start;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid transparent;
+}
+
+.pill.ok {
+  color: var(--ok);
+  background: #edf8f1;
+  border-color: #c8ead6;
+}
+
+.pill.bad {
+  color: var(--bad);
+  background: #fdeeee;
+  border-color: #f5cccc;
+}
+
+.pill.warn {
+  color: var(--warn);
+  background: #fff7ea;
+  border-color: #f3dfb8;
+}
+
+.ping-btn {
+  width: 100%;
+  margin-top: 0.2rem;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 0.8rem;
+  }
+
+  #pair-form {
+    flex-direction: column;
+  }
+}
