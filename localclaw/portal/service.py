@@ -11,6 +11,11 @@ from localclaw.node import AgentNode
 from .models import PeerHealthStore
 
 
+PAIR_START_SKILL = "localclaw.pair.start"
+PAIR_VERIFY_SKILL = "localclaw.pair.verify"
+PAIR_STATUS_SKILL = "localclaw.pair.status"
+
+
 class _EventBus:
     def __init__(self) -> None:
         self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
@@ -62,6 +67,110 @@ class PortalService:
         self._tasks: list[asyncio.Task[None]] = []
         self._inflight: set[str] = set()
         self._ping_semaphore = asyncio.Semaphore(self.max_concurrent_pings)
+
+    async def chat_state(self, peer_id: str) -> dict[str, Any]:
+        peer = self.health.get(peer_id)
+        if peer is None:
+            raise KeyError(peer_id)
+
+        pairing = await self._pair_status(peer_id)
+        return {
+            "peer_id": peer_id,
+            "peer_name": peer.name,
+            "skills": list(peer.caps),
+            "default_skill": self._default_chat_skill(peer.caps),
+            "pairing": pairing,
+        }
+
+    async def start_pairing(self, peer_id: str) -> dict[str, Any]:
+        if self.health.get(peer_id) is None:
+            raise KeyError(peer_id)
+        result = await self._run_pair_task(
+            peer_id,
+            PAIR_START_SKILL,
+            {
+                "requester_id": self.config.agent_id,
+                "requester_name": self.config.agent_name,
+            },
+        )
+        self._publish("pairing_update", {"peer_id": peer_id, **result})
+        return result
+
+    async def verify_pairing(self, peer_id: str, pin: str) -> dict[str, Any]:
+        if self.health.get(peer_id) is None:
+            raise KeyError(peer_id)
+        result = await self._run_pair_task(
+            peer_id,
+            PAIR_VERIFY_SKILL,
+            {
+                "requester_id": self.config.agent_id,
+                "requester_name": self.config.agent_name,
+                "pin": pin,
+            },
+        )
+        self._publish("pairing_update", {"peer_id": peer_id, **result})
+        return result
+
+    async def send_chat(
+        self,
+        peer_id: str,
+        *,
+        message: str,
+        skill: str | None = None,
+        timeout_s: float = 45.0,
+    ) -> dict[str, Any]:
+        peer = self.health.get(peer_id)
+        if peer is None:
+            raise KeyError(peer_id)
+
+        pairing = await self._pair_status(peer_id)
+        if pairing.get("pair_required") and not pairing.get("paired"):
+            return {
+                "ok": False,
+                "error": "pairing_required",
+                "message": "Pairing is required before chat.",
+                "pairing": pairing,
+            }
+
+        selected_skill = (skill or "").strip() or self._default_chat_skill(peer.caps)
+        if selected_skill not in peer.caps:
+            return {
+                "ok": False,
+                "error": "skill_not_supported",
+                "message": f"Peer does not advertise skill '{selected_skill}'.",
+                "pairing": pairing,
+            }
+
+        response = await self.node.send_task(
+            peer_id,
+            selected_skill,
+            message,
+            timeout=timeout_s,
+        )
+        if not bool(response.get("ok", False)):
+            err = response.get("error") or {}
+            return {
+                "ok": False,
+                "error": str(err.get("code") or "task_failed"),
+                "message": str(err.get("message") or "Task failed"),
+                "raw": response,
+                "pairing": pairing,
+            }
+
+        output = response.get("output")
+        if isinstance(output, dict) and "text" in output:
+            rendered = str(output.get("text", ""))
+        else:
+            rendered = str(output)
+        return {
+            "ok": True,
+            "peer_id": peer_id,
+            "skill": selected_skill,
+            "message": rendered,
+            "raw_output": output,
+            "ms": int(response.get("ms", 0)),
+            "pairing": pairing,
+        }
 
     @property
     def running(self) -> bool:
@@ -213,6 +322,56 @@ class PortalService:
         }
         self._publish("ping_result", payload)
         return payload
+
+    async def _pair_status(self, peer_id: str) -> dict[str, Any]:
+        try:
+            result = await self._run_pair_task(
+                peer_id,
+                PAIR_STATUS_SKILL,
+                {
+                    "requester_id": self.config.agent_id,
+                    "requester_name": self.config.agent_name,
+                },
+            )
+        except Exception:
+            return {"paired": True, "pair_required": False, "compat_mode": True}
+
+        if result.get("ok") is False and result.get("error") == "unknown_skill":
+            return {"paired": True, "pair_required": False, "compat_mode": True}
+        return {
+            "paired": bool(result.get("paired", False)),
+            "pair_required": bool(result.get("pair_required", False)),
+            "already_paired": bool(result.get("already_paired", False)),
+            "expires_at": result.get("expires_at"),
+        }
+
+    async def _run_pair_task(self, peer_id: str, skill: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self.node.send_task(peer_id, skill, payload, timeout=15.0)
+        if not bool(response.get("ok", False)):
+            err = response.get("error") or {}
+            return {
+                "ok": False,
+                "error": str(err.get("code") or "task_failed"),
+                "message": str(err.get("message") or "Task failed"),
+            }
+        output = response.get("output")
+        if isinstance(output, dict):
+            return output
+        return {"ok": False, "error": "invalid_pair_payload", "message": "Pairing payload was invalid"}
+
+    @staticmethod
+    def _default_chat_skill(skills: list[str]) -> str:
+        if "ask" in skills:
+            return "ask"
+        if "summarize" in skills:
+            return "summarize"
+        if "explain" in skills:
+            return "explain"
+        if "echo" in skills:
+            return "echo"
+        if skills:
+            return skills[0]
+        return "echo"
 
     def _publish(self, event_name: str, payload: dict[str, Any]) -> None:
         self.events.publish(self._make_event(event_name, payload))

@@ -2,6 +2,8 @@ const state = {
   peers: new Map(),
   paired: false,
   pollTimer: null,
+  chatPeerId: null,
+  chatHistory: new Map(),
 };
 
 const pairingEl = document.getElementById("pairing");
@@ -12,6 +14,20 @@ const pairStatus = document.getElementById("pair-status");
 const peersEl = document.getElementById("peers");
 const metaLine = document.getElementById("meta-line");
 const peerTemplate = document.getElementById("peer-template");
+
+const chatViewEl = document.getElementById("chat-view");
+const chatBackBtn = document.getElementById("chat-back");
+const chatTitleEl = document.getElementById("chat-title");
+const chatMetaEl = document.getElementById("chat-meta");
+const chatPairingEl = document.getElementById("chat-pairing");
+const chatPairForm = document.getElementById("chat-pair-form");
+const chatPairPinInput = document.getElementById("chat-pair-pin");
+const chatPairStatus = document.getElementById("chat-pair-status");
+const chatPanelEl = document.getElementById("chat-panel");
+const chatSkillEl = document.getElementById("chat-skill");
+const chatMessagesEl = document.getElementById("chat-messages");
+const chatForm = document.getElementById("chat-form");
+const chatInputEl = document.getElementById("chat-input");
 
 bootstrap().catch(() => {
   pairingEl.classList.remove("hidden");
@@ -46,6 +62,88 @@ pairForm.addEventListener("submit", async (event) => {
   await refreshMeta();
   await refreshPeers();
   startEventStream();
+});
+
+chatBackBtn.addEventListener("click", () => {
+  state.chatPeerId = null;
+  chatViewEl.classList.add("hidden");
+  dashboardEl.classList.remove("hidden");
+});
+
+chatPairForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const peerId = state.chatPeerId;
+  if (!peerId) {
+    return;
+  }
+  const pin = chatPairPinInput.value.trim();
+  if (!pin) {
+    return;
+  }
+  chatPairStatus.textContent = "Verifying...";
+
+  const response = await fetch(`/api/peers/${encodeURIComponent(peerId)}/chat/pair/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin }),
+  });
+  if (!response.ok) {
+    chatPairStatus.textContent = "Verification failed.";
+    return;
+  }
+  const payload = await response.json();
+  if (!payload.ok) {
+    chatPairStatus.textContent = payload.message || payload.error || "Invalid PIN";
+    return;
+  }
+  chatPairStatus.textContent = "Paired. You can start chatting.";
+  chatPairPinInput.value = "";
+  showChatPanel();
+  addChatMessage(peerId, "system", "Pairing complete.");
+});
+
+chatForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const peerId = state.chatPeerId;
+  if (!peerId) {
+    return;
+  }
+  const message = chatInputEl.value.trim();
+  if (!message) {
+    return;
+  }
+  const skill = chatSkillEl.value || null;
+  chatInputEl.value = "";
+  addChatMessage(peerId, "user", message);
+
+  const submitButton = chatForm.querySelector("button[type=submit]");
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+  try {
+    const response = await fetch(`/api/peers/${encodeURIComponent(peerId)}/chat/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, skill, timeout_s: 45 }),
+    });
+    if (!response.ok) {
+      addChatMessage(peerId, "system", "Failed to send message.");
+      return;
+    }
+    const payload = await response.json();
+    if (!payload.ok) {
+      addChatMessage(peerId, "system", payload.message || payload.error || "Request failed.");
+      if (payload.error === "pairing_required") {
+        showChatPairing();
+      }
+      return;
+    }
+    addChatMessage(peerId, "agent", String(payload.message || ""));
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
 });
 
 async function bootstrap() {
@@ -115,9 +213,9 @@ function renderPeers() {
     const pill = node.querySelector(".pill");
     applyStatus(pill, peer.reachable);
 
-    const button = node.querySelector(".ping-btn");
+    const button = node.querySelector(".chat-btn");
     button.dataset.peerId = peer.peer_id;
-    button.addEventListener("click", onPingClick);
+    button.addEventListener("click", onChatClick);
 
     peersEl.appendChild(node);
   }
@@ -151,7 +249,7 @@ function formatPing(peer) {
   return `Last ping: ${ago} · failed${peer.last_error ? ` (${peer.last_error})` : ""}`;
 }
 
-async function onPingClick(event) {
+async function onChatClick(event) {
   const button = event.currentTarget;
   const peerId = button.dataset.peerId;
   if (!peerId) {
@@ -159,10 +257,112 @@ async function onPingClick(event) {
   }
   button.disabled = true;
   try {
-    await fetch(`/api/peers/${encodeURIComponent(peerId)}/ping`, { method: "POST" });
+    await openChat(peerId);
   } finally {
     button.disabled = false;
   }
+}
+
+async function openChat(peerId) {
+  const peer = state.peers.get(peerId);
+  state.chatPeerId = peerId;
+  dashboardEl.classList.add("hidden");
+  chatViewEl.classList.remove("hidden");
+  chatTitleEl.textContent = `Chat · ${peer?.name || peerId}`;
+
+  const response = await fetch(`/api/peers/${encodeURIComponent(peerId)}/chat`);
+  if (!response.ok) {
+    chatMetaEl.textContent = "Failed to load chat state.";
+    showChatPairing();
+    return;
+  }
+  const payload = await response.json();
+
+  const skills = payload.skills || [];
+  renderSkillOptions(skills, payload.default_skill);
+  chatMetaEl.textContent = `${peer?.host || "?"}:${peer?.port || "?"} · skills: ${skills.join(", ") || "none"}`;
+  renderHistory(peerId);
+
+  const pairing = payload.pairing || {};
+  if (pairing.pair_required && !pairing.paired) {
+    showChatPairing();
+    chatPairStatus.textContent = "Requesting PIN from agent...";
+    await requestPairingPin(peerId);
+    return;
+  }
+  showChatPanel();
+}
+
+async function requestPairingPin(peerId) {
+  const response = await fetch(`/api/peers/${encodeURIComponent(peerId)}/chat/pair/start`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    chatPairStatus.textContent = "Could not request pairing PIN.";
+    return;
+  }
+  const payload = await response.json();
+  if (!payload.ok) {
+    chatPairStatus.textContent = payload.message || payload.error || "Could not request pairing PIN.";
+    return;
+  }
+  if (payload.pair_required) {
+    chatPairStatus.textContent = "PIN requested. Enter the 6-digit PIN from that agent's CLI.";
+    return;
+  }
+  chatPairStatus.textContent = "Already paired.";
+  showChatPanel();
+}
+
+function renderSkillOptions(skills, defaultSkill) {
+  chatSkillEl.textContent = "";
+  for (const skill of skills) {
+    const option = document.createElement("option");
+    option.value = skill;
+    option.textContent = skill;
+    if (skill === defaultSkill) {
+      option.selected = true;
+    }
+    chatSkillEl.appendChild(option);
+  }
+}
+
+function renderHistory(peerId) {
+  chatMessagesEl.textContent = "";
+  const history = state.chatHistory.get(peerId) || [];
+  for (const item of history) {
+    const row = document.createElement("div");
+    row.className = `chat-row ${item.role}`;
+    const role = document.createElement("div");
+    role.className = "chat-role";
+    role.textContent = item.role === "user" ? "You" : item.role === "agent" ? "Agent" : "System";
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    bubble.textContent = item.text;
+    row.appendChild(role);
+    row.appendChild(bubble);
+    chatMessagesEl.appendChild(row);
+  }
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function addChatMessage(peerId, role, text) {
+  const history = state.chatHistory.get(peerId) || [];
+  history.push({ role, text: String(text || "") });
+  state.chatHistory.set(peerId, history);
+  if (state.chatPeerId === peerId) {
+    renderHistory(peerId);
+  }
+}
+
+function showChatPairing() {
+  chatPairingEl.classList.remove("hidden");
+  chatPanelEl.classList.add("hidden");
+}
+
+function showChatPanel() {
+  chatPairingEl.classList.add("hidden");
+  chatPanelEl.classList.remove("hidden");
 }
 
 function startEventStream() {

@@ -9,6 +9,7 @@ from typing import Any
 
 from .config import AgentConfig
 from .node import AgentNode
+from .pairing import PairingManager
 from .peer_store import PeerRecord
 from .protocol import build_error
 from .skills.registry import SkillRegistry
@@ -162,10 +163,18 @@ def build_agent(config: AgentConfig) -> Agent:
     _load_dotenv()
 
     from .skills.builtins import register_builtins
+    from .skills.pairing import register_pairing_skills
     from .skills.registry import SkillRegistry
 
     registry = SkillRegistry()
     register_builtins(registry)
+    register_pairing_skills(
+        registry,
+        PairingManager(
+            agent_name=config.agent_name,
+            agent_id=config.agent_id or "",
+        ),
+    )
 
     MISTRAL_SKILLS = {"summarize", "code", "ask", "translate", "explain"}
     wants_mistral = MISTRAL_SKILLS.intersection(config.caps)

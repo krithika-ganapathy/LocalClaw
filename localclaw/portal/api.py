@@ -19,6 +19,16 @@ class PairRequest(BaseModel):
     pin: str
 
 
+class PeerPairVerifyRequest(BaseModel):
+    pin: str
+
+
+class ChatMessageRequest(BaseModel):
+    message: str
+    skill: str | None = None
+    timeout_s: float = 45.0
+
+
 def create_portal_app(service: PortalService, auth: PortalAuth) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -81,6 +91,39 @@ def create_portal_app(service: PortalService, auth: PortalAuth) -> FastAPI:
     async def api_ping_peer(peer_id: str) -> dict[str, Any]:
         try:
             return await service.manual_ping(peer_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown_peer") from exc
+
+    @app.get("/api/peers/{peer_id}/chat")
+    async def api_chat_state(peer_id: str) -> dict[str, Any]:
+        try:
+            return await service.chat_state(peer_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown_peer") from exc
+
+    @app.post("/api/peers/{peer_id}/chat/pair/start")
+    async def api_chat_pair_start(peer_id: str) -> dict[str, Any]:
+        try:
+            return await service.start_pairing(peer_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown_peer") from exc
+
+    @app.post("/api/peers/{peer_id}/chat/pair/verify")
+    async def api_chat_pair_verify(peer_id: str, payload: PeerPairVerifyRequest) -> dict[str, Any]:
+        try:
+            return await service.verify_pairing(peer_id, payload.pin)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown_peer") from exc
+
+    @app.post("/api/peers/{peer_id}/chat/message")
+    async def api_chat_message(peer_id: str, payload: ChatMessageRequest) -> dict[str, Any]:
+        try:
+            return await service.send_chat(
+                peer_id,
+                message=payload.message,
+                skill=payload.skill,
+                timeout_s=payload.timeout_s,
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="unknown_peer") from exc
 

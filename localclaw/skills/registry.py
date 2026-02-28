@@ -18,9 +18,15 @@ class SkillRegistry:
         *,
         description: str = "",
         streaming: bool = False,
+        hidden: bool = False,
     ) -> None:
         self._handlers[name] = handler
-        self._meta[name] = {"name": name, "description": description, "streaming": streaming}
+        self._meta[name] = {
+            "name": name,
+            "description": description,
+            "streaming": streaming,
+            "hidden": hidden,
+        }
 
     def get(self, name: str) -> SkillHandler | None:
         return self._handlers.get(name)
@@ -28,5 +34,7 @@ class SkillRegistry:
     def names(self) -> list[str]:
         return list(self._handlers)
 
-    def list_skills(self) -> list[dict[str, Any]]:
-        return list(self._meta.values())
+    def list_skills(self, *, include_hidden: bool = False) -> list[dict[str, Any]]:
+        if include_hidden:
+            return list(self._meta.values())
+        return [meta for meta in self._meta.values() if not bool(meta.get("hidden", False))]

@@ -57,6 +57,7 @@ body {
   margin-bottom: 0.9rem;
 }
 
+#chat-pair-form,
 #pair-form {
   display: flex;
   gap: 0.5rem;
@@ -175,9 +176,85 @@ button:hover {
   border-color: #f3dfb8;
 }
 
-.ping-btn {
+.chat-btn {
   width: 100%;
   margin-top: 0.2rem;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.back-btn {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.chat-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+#chat-skill {
+  min-width: 180px;
+}
+
+.chat-messages {
+  min-height: 260px;
+  max-height: 50vh;
+  overflow-y: auto;
+  border: 1px solid #cad2dc;
+  border-radius: 10px;
+  padding: 0.8rem;
+  background: #fff;
+}
+
+.chat-row {
+  margin-bottom: 0.6rem;
+}
+
+.chat-row:last-child {
+  margin-bottom: 0;
+}
+
+.chat-role {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.chat-bubble {
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-row.user .chat-bubble {
+  background: #e7f2f9;
+}
+
+.chat-row.agent .chat-bubble {
+  background: #f2f6ea;
+}
+
+.chat-row.system .chat-bubble {
+  background: #f7f2e7;
+}
+
+.chat-form {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+#chat-input {
+  width: 100%;
+  resize: vertical;
 }
 
 @media (max-width: 640px) {
@@ -185,7 +262,13 @@ button:hover {
     padding: 0.8rem;
   }
 
+  #chat-pair-form,
   #pair-form {
+    flex-direction: column;
+  }
+
+  .chat-head {
+    align-items: flex-start;
     flex-direction: column;
   }
 }
