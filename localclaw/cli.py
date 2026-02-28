@@ -20,7 +20,11 @@ def _format_json(payload: Any) -> str:
 
 
 def _print_peer_table(node: AgentNode) -> None:
-    peers = sorted(node.peer_store.all(), key=lambda p: p.peer_id)
+    self_id = node.config.agent_id
+    peers = sorted(
+        (peer for peer in node.peer_store.all() if peer.peer_id != self_id),
+        key=lambda p: p.peer_id,
+    )
     if not peers:
         print("No peers discovered.")
         return
@@ -218,28 +222,35 @@ def build_parser() -> argparse.ArgumentParser:
             """
         ),
     )
-    parser.add_argument("--config", default=None, help="Optional config path (default: ~/.LocalClaw/config.yaml)")
+    config_help = "Optional config path (default: ~/.LocalClaw/config.yaml)"
+    parser.add_argument("--config", default=None, help=config_help)
 
     sub = parser.add_subparsers(dest="command", required=True)
 
     cmd_print = sub.add_parser("print-config", help="Print parsed config and derived agent_id")
+    cmd_print.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
     cmd_print.add_argument("--ensure", action="store_true", help="Create default config if missing")
 
     cmd_run = sub.add_parser("run", help="Run LocalClaw node (mDNS + TCP server)")
+    cmd_run.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
     cmd_run.add_argument("--no-discovery", action="store_true", help="Disable mDNS announce+browse")
     cmd_run.add_argument("--show-peers", action="store_true", help="Print discovered peer table every loop")
 
     cmd_scan = sub.add_parser("scan", help="Browse mDNS peers for a duration")
+    cmd_scan.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
     cmd_scan.add_argument("--timeout", type=float, default=5.0)
 
-    sub.add_parser("doctor", help="Run network diagnostics for mDNS and inbound TCP")
+    cmd_doctor = sub.add_parser("doctor", help="Run network diagnostics for mDNS and inbound TCP")
+    cmd_doctor.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
 
     cmd_ping = sub.add_parser("ping", help="Send heartbeat ping to a peer_id")
+    cmd_ping.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
     cmd_ping.add_argument("peer_id")
     cmd_ping.add_argument("--timeout", type=float, default=5.0)
     cmd_ping.add_argument("--wait", type=float, default=5.0, help="Wait for peer discovery before ping")
 
     cmd_task = sub.add_parser("send-task", help="Send task to a peer")
+    cmd_task.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
     cmd_task.add_argument("--peer", dest="peer_id", required=True)
     cmd_task.add_argument("--skill", required=True)
     cmd_task.add_argument("--input", required=True, help="JSON string or raw string")
@@ -248,12 +259,14 @@ def build_parser() -> argparse.ArgumentParser:
     cmd_task.add_argument("--wait", type=float, default=5.0)
 
     cmd_file = sub.add_parser("send-file", help="Send file payload to a peer")
+    cmd_file.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
     cmd_file.add_argument("--peer", dest="peer_id", required=True)
     cmd_file.add_argument("--path", required=True)
     cmd_file.add_argument("--timeout", type=float, default=60.0)
     cmd_file.add_argument("--wait", type=float, default=5.0)
 
     cmd_caps = sub.add_parser("capability-query", help="Request capability manifest from peer")
+    cmd_caps.add_argument("--config", default=argparse.SUPPRESS, help=config_help)
     cmd_caps.add_argument("--peer", dest="peer_id", required=True)
     cmd_caps.add_argument("--timeout", type=float, default=10.0)
     cmd_caps.add_argument("--wait", type=float, default=5.0)

@@ -31,12 +31,14 @@ class _ServiceListener:
         zeroconf: Zeroconf,
         peer_store: PeerStore,
         loop: asyncio.AbstractEventLoop,
+        local_agent_id: str,
         on_update: Callable[[PeerRecord], None] | None = None,
         on_remove: Callable[[str], None] | None = None,
     ) -> None:
         self._zeroconf = zeroconf
         self._peer_store = peer_store
         self._loop = loop
+        self._local_agent_id = local_agent_id
         self._on_update = on_update
         self._on_remove = on_remove
         self._service_to_peer: dict[str, str] = {}
@@ -68,6 +70,8 @@ class _ServiceListener:
         properties = {self._decode(k): self._decode(v) for k, v in (info.properties or {}).items()}
         peer_id = properties.get("id")
         if not peer_id:
+            return None
+        if peer_id == self._local_agent_id:
             return None
 
         host = ""
@@ -170,6 +174,7 @@ class MDNSDiscovery:
             zeroconf=self._zeroconf,
             peer_store=self._peer_store,
             loop=loop,
+            local_agent_id=self._config.agent_id or "",
             on_update=self._on_update,
             on_remove=self._on_remove,
         )

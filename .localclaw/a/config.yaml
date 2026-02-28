@@ -1,0 +1,9 @@
+agent_name: agent-a
+agent_id: lc_a
+agent_port: 4117
+caps: echo,capabilities
+model: none
+status: idle
+version: 0.1.0
+trust: unknown
+bind_host: 0.0.0.0
