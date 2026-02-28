@@ -138,9 +138,15 @@ uv run localclaw send-file --peer lc_b --path /tmp/localclaw-demo.txt --config .
 - `localclaw capability-query --peer <peer_id>`
 - `localclaw send-task --peer <peer_id> --skill <name> --input '<json-or-string>' [--stream]`
 - `localclaw send-file --peer <peer_id> --path <file>`
-- `localclaw portal [--bind 0.0.0.0] [--port 7420] [--ping-interval 10]`
+- `localclaw portal [--bind 0.0.0.0] [--port 7420] [--ping-interval 10] [--require-pin]`
 
 ## LAN Portal (Phone-Friendly)
+
+The portal is an observer/control UI for LAN discovery + ping. It is intentionally decoupled from agent runtime:
+
+- You can run `localclaw portal` on a separate machine with no agent process.
+- It discovers all LocalClaw agents on the LAN via mDNS.
+- Agent trust/pairing policy is separate from portal access control.
 
 Start:
 
@@ -158,11 +164,35 @@ The portal prints:
 Open the URL from any device on the same LAN and view discovered agents with manual ping controls.
 If `--require-pin` is enabled, enter the PIN once first.
 
-Enable portal PIN pairing only if needed:
+### Recommended operation modes
+
+1. Open observer mode (default): easiest for home/lab LANs.
+
+```bash
+uv run localclaw portal
+```
+
+2. Portal PIN mode: adds portal-level access control.
 
 ```bash
 uv run localclaw portal --require-pin
 ```
+
+### Separate watcher quick flow
+
+Run agents on one or more machines:
+
+```bash
+uv run localclaw run
+```
+
+Run portal on another machine (same LAN):
+
+```bash
+uv run localclaw portal
+```
+
+Then open the printed LAN URL (or scan the printed QR code) from phone/laptop to see all discovered agents.
 
 ## Troubleshooting
 
